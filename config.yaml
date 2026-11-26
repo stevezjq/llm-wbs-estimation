@@ -1,0 +1,72 @@
+# 实验配置 v1.0
+# 模型：deepseek-flash 为推理模型（正文常为空且忽略 temperature），已改用 deepseek-chat。
+# 若换第三方聚合端点，仅需改 model.base_url 与 model.name。
+
+model:
+  base_url: https://api.deepseek.com
+  name: deepseek-chat
+  temperature: 0.7
+  max_tokens: 4096
+  timeout_s: 120
+
+run:
+  n_repeat: 5          # 每个 (案例 × 提示词) 重复次数
+  max_retries: 3
+  out_dir: runs
+  system_prompt: "你是一名资深软件工程专家，擅长 WBS 拆解与工时估算。严格按要求输出。"
+
+cases:
+  - id: A
+    requirement: data/requirements/A_web_equipment_booking.md
+    expert_wbs: data/expert_wbs/A_web_equipment_booking.csv
+    checklist: data/checklist/A_web_equipment_booking.csv
+  - id: B
+    requirement: data/requirements/B_internal_web_scanner.md
+    expert_wbs: data/expert_wbs/B_internal_web_scanner.csv
+    checklist: data/checklist/B_internal_web_scanner.csv
+  - id: C
+    requirement: data/requirements/C_minimind_qa_mvp.md
+    expert_wbs: data/expert_wbs/C_minimind_qa_mvp.csv
+    checklist: data/checklist/C_minimind_qa_mvp.csv
+
+# stages 为按顺序执行的调用链；单阶段方案只有一个模板。
+prompts:
+  - id: P0
+    stages: [prompts/P0_naive.md]
+    format: markdown_table
+  - id: P1
+    stages: [prompts/P1_structured.md]
+    format: json
+  - id: P2
+    stages: [prompts/P2_roles_checklist.md]
+    format: json
+  - id: P3
+    stages: [prompts/P3_stage1_decompose.md, prompts/P3_stage2_estimate.md]
+    format: json_multi_stage
+  - id: P4
+    stages: [prompts/P4_three_point.md]
+    format: json
+  - id: P5
+    stages: [prompts/P5_deliverable_reconciliation.md]
+    format: json
+  - id: P6
+    stages: [prompts/P6_reconciliation_plus_hidden.md]
+    format: json
+
+# 模板占位符：
+#   {{REQUIREMENT}}   案例需求正文
+#   {{CONTRACT}}      prompts/00_shared_contract.md
+#   {{STAGE1_JSON}}   P3 第一阶段原始 JSON 输出
+
+output:
+  jsonl: runs/runs.jsonl
+  fields: [run_id, case_id, prompt_id, stage, repeat, model, temperature, ts,
+           request_messages, raw_response, reasoning_content, parsed, usage,
+           latency_ms, parse_ok, repair]
+
+analysis:
+  expert_wbs_dir: data/expert_wbs
+  checklist_dir: data/checklist
+  out_dir: analysis
+  # 类别字典与 estimated_basis.md 第 1.5 节保持一致
+  categories: [REQ, DES, COD, TEST, SEC, DOC, DEP, PM]
